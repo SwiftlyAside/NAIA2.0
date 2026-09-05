@@ -677,7 +677,7 @@
         "app/backend/server/agent_inbox_routes.py",
         "core/headless_agent_inbox_service.py",
         "app/web/remote/js/features/agentInboxPanel.mjs",
-        "app/web/remote/agent-inbox.css"
+        "app/web/remote/js/agent-inbox.css"
       ],
       "legacy_dependency": "none",
       "routes": [

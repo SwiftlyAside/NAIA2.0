@@ -145,6 +145,13 @@ const MODULE_REGISTRY = {
     action: 'module',
     badgeId: 'badgeAuto',
   },
+  agent_inbox: {
+    label: '📥 Agent Inbox',
+    title: 'Agent Inbox — 에이전트가 보낸 배치 승인·리뷰',
+    category: 'assistant_tools',
+    action: 'agent_inbox',
+    badgeId: 'badgeAgentInbox',
+  },
 };
 
 const CATEGORY_REGISTRY = [
@@ -179,7 +186,7 @@ const CATEGORY_REGISTRY = [
     id: 'assistant_tools',
     label: '자동화 / 고급 기능',
     title: '자동화 / 고급 기능',
-    moduleIds: ['automation'],
+    moduleIds: ['automation', 'agent_inbox'],
   },
 ];
 
@@ -199,6 +206,7 @@ export function createModuleLauncher({
   openComfyUiWeb,
   setModuleParam,
   naiReferenceBlocked = () => false,
+  openAgentInbox = () => {},
 }) {
   const root = document.getElementById('moduleLauncher');
   let observer = null;
@@ -456,7 +464,9 @@ export function createModuleLauncher({
     const config = MODULE_REGISTRY[moduleId];
     if (!config || isBlocked(moduleId)) return;
     closeMenus();
-    if (config.action === 'chunk') {
+    if (config.action === 'agent_inbox') {
+      openAgentInbox();
+    } else if (config.action === 'chunk') {
       openChunkPanel(null, true);
     } else if (config.action === 'danbooru_browser') {
       openDanbooruBrowser?.();

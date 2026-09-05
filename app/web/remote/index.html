@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css?v=20260831-onechip">
+<link rel="stylesheet" href="js/agent-inbox.css?v=20260906-agent-inbox">
 <script>
 // 텍스트 입력창 폰트(--font-editor) 를 첫 페인트 전에 복원한다. 이 스크립트가 없으면
 // 저장된 폰트가 모듈 로드 후에야 적용돼 화면이 한 번 튄다.
@@ -921,6 +922,15 @@
               </div>
             </div>
             <div class="queue-panel-body" data-queue-body></div>
+          </section>
+          <section class="agent-inbox-panel" id="agentInboxPanel" aria-label="Agent Inbox" hidden>
+            <div class="ai-head">
+              <div class="ai-title"><span data-ai-title>Agent Inbox</span><span class="ai-meta" data-ai-meta></span></div>
+              <button type="button" class="ai-btn ghost" data-ai-action="back" hidden>← 인박스</button>
+              <button type="button" class="ai-btn" data-ai-collapse aria-label="Collapse">▾</button>
+              <button type="button" class="ai-btn" data-ai-action="close" aria-label="Close">×</button>
+            </div>
+            <div class="ai-body" data-ai-body></div>
           </section>
           <section class="event-preset-overlay" id="eventPresetOverlay" aria-label="Event Preset context" aria-hidden="true" hidden></section>
           <!-- Interactive Assets: 조합 스냅샷 컨트롤. Interactive 모드일 때만 보인다. -->

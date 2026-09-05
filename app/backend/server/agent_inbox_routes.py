@@ -196,6 +196,11 @@ async def handle_agent_inbox_command(
             jobs = service.approvable_jobs(batch_id, job_ids)
             if not jobs:
                 raise AgentInboxError("no pending jobs to approve", 409)
+            # 승인에서 뺀 잡(체크 해제)은 skipped 로 확정 — 남겨 두면 배치가 영영 done 이 되지 않는다.
+            selected = {job["job_id"] for job in jobs}
+            for left in service.approvable_jobs(batch_id):
+                if left["job_id"] not in selected:
+                    await run_in_thread(service.skip_job, left["job_id"])
             await run_in_thread(service.mark_batch_approved, batch_id)
             queued = 0
             for job in jobs:

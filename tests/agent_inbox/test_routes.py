@@ -144,6 +144,28 @@ def test_ws_approve_enqueues_and_starts_runner(tmp_path, monkeypatch):
     assert any(x["type"] == "agent_inbox_done" for x in broadcasts)
 
 
+def test_ws_approve_subset_skips_unselected_and_blocked_enqueue_fails_jobs(tmp_path, monkeypatch):
+    app, ctx, broadcasts, started, broadcast_json, run_in_thread, start_runner = make_app(tmp_path)
+    c = TestClient(app)
+    bid = c.post("/api/agent-inbox/batches", json=batch_payload(3)).json()["batch_id"]
+    jobs = c.get(f"/api/agent-inbox/batches/{bid}").json()["jobs"]
+
+    async def blocked_enqueue(context, command):
+        return SimpleNamespace(ok=False, request_id="", blocked_reason="NAI credential is not configured.",
+                               websocket_payload=lambda: {})
+
+    monkeypatch.setattr(routes, "enqueue_generation_request", blocked_enqueue)
+    ws = FakeWs()
+    asyncio.run(routes.handle_agent_inbox_command(
+        ws, ctx, set(), {"type": "agent_inbox_approve", "batch_id": bid, "job_ids": [jobs[0]["job_id"], jobs[1]["job_id"]]},
+        run_in_thread=run_in_thread, broadcast_json=broadcast_json, start_generation_runner=start_runner))
+    b = routes.agent_inbox_service(ctx).get_batch(bid)
+    assert [j["status"] for j in b["jobs"]] == ["failed", "failed", "skipped"]
+    assert b["status"] == "done" and started == []
+    assert ws.sent[-1]["type"] == "toast" and ws.sent[-1]["level"] == "error"
+    assert any(x["type"] == "agent_inbox_done" and x["failed"] == 2 and x["skipped"] == 1 for x in broadcasts)
+
+
 def test_ws_verdict_reject_skip_refresh(tmp_path):
     app, ctx, broadcasts, started, broadcast_json, run_in_thread, start_runner = make_app(tmp_path)
     c = TestClient(app)
