@@ -26,7 +26,8 @@
     "app/backend/server/style_thumbnail_routes.py",
     "app/backend/server/translation_history_routes.py",
     "app/backend/server/websocket_session.py",
-    "app/backend/server/web_shell_routes.py"
+    "app/backend/server/web_shell_routes.py",
+    "app/backend/server/agent_inbox_routes.py"
   ],
   "legacy_dependency_policy": {
     "none": "Feature is implemented by the headless backend without desktop imports.",
@@ -667,6 +668,26 @@
         {"method": "GET", "path": "/api/interactive-advice", "smoke": "non_destructive"},
         {"method": "GET", "path": "/api/interactive-advice/batch", "smoke": "non_destructive"},
         {"method": "GET", "path": "/api/interactive-advice/conflicts", "smoke": "non_destructive"}
+      ]
+    },
+    {
+      "id": "agent_inbox",
+      "name": "Agent Inbox (external agent batch submission, user-approved generation, review board)",
+      "source_files": [
+        "app/backend/server/agent_inbox_routes.py",
+        "core/headless_agent_inbox_service.py",
+        "app/web/remote/js/features/agentInboxPanel.mjs",
+        "app/web/remote/agent-inbox.css"
+      ],
+      "legacy_dependency": "none",
+      "routes": [
+        {"method": "POST", "path": "/api/agent-inbox/batches", "smoke": "state_mutation"},
+        {"method": "GET", "path": "/api/agent-inbox/batches", "smoke": "non_destructive"},
+        {"method": "GET", "path": "/api/agent-inbox/batches/{batch_id}", "smoke": "non_destructive"},
+        {"method": "GET", "path": "/api/agent-inbox/batches/{batch_id}/results", "smoke": "non_destructive"},
+        {"method": "POST", "path": "/api/agent-inbox/batches/{batch_id}/cancel", "smoke": "state_mutation"},
+        {"method": "POST", "path": "/api/agent-inbox/jobs/{job_id}/agent-review", "smoke": "state_mutation"},
+        {"method": "GET", "path": "/api/agent-inbox/settings", "smoke": "non_destructive"}
       ]
     }
   ],

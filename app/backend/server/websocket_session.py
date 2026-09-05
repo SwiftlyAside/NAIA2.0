@@ -36,6 +36,7 @@ from app.backend.server.depth_search_commands import (
     DEPTH_SEARCH_COMMAND_TYPES,
     handle_depth_search_command,
 )
+from app.backend.server.agent_inbox_routes import AGENT_INBOX_COMMAND_TYPES, handle_agent_inbox_command
 from app.backend.server.generation_commands import (
     GENERATION_COMMAND_TYPES,
     enqueue_generation_request,
@@ -314,6 +315,9 @@ async def send_startup_messages(
         client_host=client_host,
     ):
         await ws.send_text(json.dumps(message, ensure_ascii=False))
+    inbox = getattr(context, "agent_inbox_service", None)  # Agent Inbox 접속 스냅샷
+    if inbox is not None:
+        await ws.send_text(json.dumps(inbox.state_payload(), ensure_ascii=False))
     await ws.send_text(json.dumps({"type": "lazy_indices_ready"}))
 
 
@@ -452,6 +456,12 @@ async def handle_json_command(
             clients,
             command,
             run_in_thread=run_in_thread,
+        )
+    elif command_type in AGENT_INBOX_COMMAND_TYPES:  # Agent Inbox — 승인은 이 WS 경로뿐 (REST 에 없다)
+        await handle_agent_inbox_command(
+            ws, context, clients, command,
+            run_in_thread=run_in_thread, broadcast_json=broadcast_json,
+            start_generation_runner=start_generation_runner,
         )
     elif command_type in GENERATION_COMMAND_TYPES:
         if command_type == "bootstrap_random":

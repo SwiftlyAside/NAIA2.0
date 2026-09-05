@@ -22,6 +22,7 @@ from app.backend.server.interactive_assets_routes import register_interactive_as
 from app.backend.server.interactive_reference_routes import (
     register_interactive_reference_routes,
 )
+from app.backend.server.agent_inbox_routes import register_agent_inbox_routes
 from app.backend.server.generation_commands import register_generation_rest_routes
 from app.backend.server.inpaint_sequence_routes import register_inpaint_sequence_routes
 from app.backend.server.sequence_preset_routes import register_sequence_preset_routes
@@ -182,6 +183,10 @@ def register_headless_routes(
         context,
         clients=clients,
         start_generation_runner=ensure_generation_runner,
+    )
+    register_agent_inbox_routes(
+        app, context, clients=clients, run_in_thread=run_in_thread,
+        broadcast_json=broadcast_json, start_generation_runner=ensure_generation_runner,
     )
     register_install_manager_routes(app, context, run_in_thread=run_in_thread)
     register_extension_install_routes(app, context, run_in_thread=run_in_thread)
