@@ -131,3 +131,303 @@ def validate_batch(payload: dict[str, Any], *, max_jobs: int = MAX_JOBS_DEFAULT)
         "jobs": jobs,
     }
     return batch, warnings
+
+
+class AgentInboxService:
+    def __init__(self, storage_dir: Path, *, max_jobs: int = MAX_JOBS_DEFAULT, retention_days: int = 30):
+        self.storage_dir = Path(storage_dir)
+        self.max_jobs = int(max_jobs)
+        self.retention_days = int(retention_days)
+        self._lock = threading.RLock()
+        self._batches: dict[str, dict[str, Any]] = {}
+        self._job_index: dict[str, str] = {}       # job_id -> batch_id
+        self._request_index: dict[str, str] = {}   # request_id -> job_id
+        self._done_notifications: list[dict[str, Any]] = []
+
+    # ---------- 영속 ----------
+    def load_all(self) -> int:
+        """디스크의 배치를 전부 복원한다. 종료 상태(done/cancelled/rejected)가 retention_days 를
+        넘긴 파일은 삭제하고 복원하지 않는다(스펙 §4.1 보관 정리)."""
+        cutoff = datetime.now().timestamp() - self.retention_days * 86400
+        with self._lock:
+            self._batches.clear(); self._job_index.clear(); self._request_index.clear()
+            if not self.storage_dir.exists():
+                return 0
+            for path in sorted(self.storage_dir.glob("*.json")):
+                try:
+                    batch = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if not (isinstance(batch, dict) and batch.get("batch_id")):
+                    continue
+                stamp = str(batch.get("updated_at") or batch.get("created_at") or "")
+                try:
+                    updated = datetime.fromisoformat(stamp).timestamp()
+                except ValueError:
+                    updated = path.stat().st_mtime
+                if batch.get("status") in ("done", "cancelled", "rejected") and updated < cutoff:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+                    continue
+                self._index(batch)
+            return len(self._batches)
+
+    def _index(self, batch: dict[str, Any]) -> None:
+        self._batches[batch["batch_id"]] = batch
+        for job in batch.get("jobs", []):
+            self._job_index[job["job_id"]] = batch["batch_id"]
+            if job.get("request_id"):
+                self._request_index[job["request_id"]] = job["job_id"]
+
+    def _save(self, batch: dict[str, Any]) -> None:
+        batch["updated_at"] = _now_iso()
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        target = self.storage_dir / f"{batch['batch_id']}.json"
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(batch, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, target)
+
+    # ---------- 조회 ----------
+    def get_batch(self, batch_id: str) -> dict[str, Any]:
+        batch = self._batches.get(str(batch_id or ""))
+        if batch is None:
+            raise AgentInboxError("batch not found", 404)
+        return batch
+
+    def find_job(self, job_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        batch_id = self._job_index.get(str(job_id or ""))
+        if batch_id is None:
+            raise AgentInboxError("job not found", 404)
+        batch = self._batches[batch_id]
+        job = next(j for j in batch["jobs"] if j["job_id"] == job_id)
+        return batch, job
+
+    def summary(self, batch: dict[str, Any]) -> dict[str, Any]:
+        counts = {s: 0 for s in JOB_STATUSES}
+        for job in batch["jobs"]:
+            counts[job["status"]] = counts.get(job["status"], 0) + 1
+        return {
+            "batch_id": batch["batch_id"], "source": batch["source"], "project": batch["project"],
+            "title": batch["title"], "status": batch["status"], "created_at": batch["created_at"],
+            "updated_at": batch.get("updated_at"), "job_count": len(batch["jobs"]), "counts": counts,
+            "paid_jobs": sum(1 for j in batch["jobs"] if not is_free_tier(j["params"])),
+            "note": batch.get("note", ""),
+        }
+
+    def list_batches(self, status: str | None = None, source: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = [b for b in self._batches.values()
+                    if (not status or b["status"] == status) and (not source or b["source"] == source)]
+            rows.sort(key=lambda b: b["created_at"], reverse=True)
+            return [self.summary(b) for b in rows[: max(1, int(limit))]]
+
+    def state_payload(self) -> dict[str, Any]:
+        with self._lock:
+            summaries = self.list_batches(limit=50)
+            by_created = sorted(self._batches.values(), key=lambda b: b["created_at"], reverse=True)
+            active = next((b for b in by_created if b["status"] in ("approved", "generating")), None)
+            if active is None:
+                by_updated = sorted(self._batches.values(), key=lambda b: b.get("updated_at") or "", reverse=True)
+                active = next((b for b in by_updated if b["status"] == "done"), None)
+            return {"type": "agent_inbox_state", "batches": summaries, "active": active,
+                    "unread": sum(1 for b in self._batches.values() if b["status"] == "pending")}
+
+    def results_payload(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            return {"batch_id": batch["batch_id"], "status": batch["status"], "jobs": [{
+                "job_id": j["job_id"], "key": j["key"], "status": j["status"], "request_id": j.get("request_id", ""),
+                "history_id": j.get("history_id", ""), "file_path": j.get("file_path", ""),
+                "rel_path": j.get("rel_path", ""),
+                "image_url": f"/api/history/image/{j['history_id']}" if j.get("history_id") else "",
+                "final": j.get("final"), "verdict": j.get("verdict"), "agent_review": j.get("agent_review"),
+                "error": j.get("error", ""),
+            } for j in batch["jobs"]]}
+
+    def pop_done_notifications(self) -> list[dict[str, Any]]:
+        with self._lock:
+            out, self._done_notifications = self._done_notifications, []
+            return out
+
+    # ---------- 변경 ----------
+    def submit(self, payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        batch, warnings = validate_batch(payload, max_jobs=self.max_jobs)
+        with self._lock:
+            batch["batch_id"] = uuid.uuid4().hex
+            batch["status"] = "pending"
+            batch["created_at"] = _now_iso()
+            for job in batch["jobs"]:
+                job["job_id"] = uuid.uuid4().hex
+            self._index(batch)
+            self._save(batch)
+            return batch, warnings
+
+    def cancel_batch(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            if batch["status"] != "pending":
+                raise AgentInboxError(f"batch is {batch['status']}, only pending can be cancelled", 409)
+            batch["status"] = "cancelled"
+            for job in batch["jobs"]:
+                if job["status"] == "pending":
+                    job["status"] = "skipped"
+            self._save(batch)
+            return batch
+
+    def reject_batch(self, batch_id: str, note: str = "") -> dict[str, Any]:
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            if batch["status"] != "pending":
+                raise AgentInboxError(f"batch is {batch['status']}", 409)
+            batch["status"] = "rejected"
+            batch["note"] = str(note or "")
+            for job in batch["jobs"]:
+                job["status"] = "skipped"
+            self._save(batch)
+            return batch
+
+    def skip_job(self, job_id: str) -> dict[str, Any]:
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            if job["status"] != "pending":
+                raise AgentInboxError(f"job is {job['status']}", 409)
+            job["status"] = "skipped"
+            self._rollup(batch)
+            self._save(batch)
+            return job
+
+    def set_verdict(self, job_id: str, decision: str, note: str = "", by: str = "user") -> dict[str, Any]:
+        if decision not in VERDICTS:
+            raise AgentInboxError(f"decision must be one of {VERDICTS}")
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            job["verdict"] = {"decision": decision, "note": str(note or ""),
+                              "by": by if by in ("user", "agent") else "user", "at": _now_iso()}
+            self._save(batch)
+            return job
+
+    def set_agent_review(self, job_id: str, review: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(review, dict):
+            raise AgentInboxError("review must be an object")
+        clean: dict[str, Any] = {}
+        for key, value in review.items():
+            if key in REVIEW_KEYS:
+                if value not in REVIEW_VALUES:
+                    raise AgentInboxError(f"{key} must be one of {REVIEW_VALUES}")
+                clean[key] = value
+            elif key == "note":
+                clean["note"] = str(value or "")[:2000]
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            merged = dict(job.get("agent_review") or {})
+            merged.update(clean)
+            merged["at"] = _now_iso()
+            job["agent_review"] = merged
+            self._save(batch)
+            return job
+
+    def approvable_jobs(self, batch_id: str, job_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            wanted = set(job_ids) if job_ids else None
+            return [j for j in batch["jobs"] if j["status"] == "pending" and (wanted is None or j["job_id"] in wanted)]
+
+    def mark_batch_approved(self, batch_id: str) -> dict[str, Any]:
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            if batch["status"] != "pending":
+                raise AgentInboxError(f"batch is {batch['status']}", 409)
+            batch["status"] = "approved"
+            batch["approved_at"] = _now_iso()
+            self._save(batch)
+            return batch
+
+    def mark_job_queued(self, job_id: str, request_id: str) -> dict[str, Any]:
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            job["status"] = "queued"
+            job["request_id"] = str(request_id)
+            self._request_index[job["request_id"]] = job_id
+            self._save(batch)
+            return job
+
+    def mark_job_failed(self, job_id: str, reason: str) -> dict[str, Any]:
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            job["status"] = "failed"
+            job["error"] = str(reason or "")[:500]
+            self._rollup(batch)
+            self._save(batch)
+            return job
+
+    def cancel_generating(self, batch_id: str) -> list[str]:
+        """진행 중 배치를 즉시 cancelled 로 확정하고 남은 queued 잡의 request_id 목록을 돌려준다.
+        큐 제거는 호출자(라우트)가 하고, 제거 이벤트(queue_request_removed)가 돌아오면 skipped 로 바뀐다.
+        생성 중인 1장은 끝까지 가서 done 으로 기록된다."""
+        with self._lock:
+            batch = self.get_batch(batch_id)
+            if batch["status"] not in ("approved", "generating"):
+                raise AgentInboxError(f"batch is {batch['status']}", 409)
+            batch["status"] = "cancelled"
+            batch["finished_at"] = _now_iso()
+            self._save(batch)
+            return [j["request_id"] for j in batch["jobs"] if j["status"] == "queued" and j.get("request_id")]
+
+    # ---------- 이벤트 ----------
+    def handle_event(self, name: str, payload: dict[str, Any], *,
+                     history_lookup: Callable[[str], dict[str, Any] | None] | None = None) -> list[str]:
+        if name == "queue_cleared":
+            with self._lock:
+                changed = []
+                for batch in self._batches.values():
+                    if any(j["status"] == "queued" for j in batch["jobs"]):
+                        for j in batch["jobs"]:
+                            if j["status"] == "queued":
+                                j["status"] = "skipped"
+                        self._rollup(batch); self._save(batch); changed.append(batch["batch_id"])
+                return changed
+        request_id = str((payload or {}).get("request_id") or "")
+        with self._lock:
+            job_id = self._request_index.get(request_id)
+            if not job_id:
+                return []
+            batch, job = self.find_job(job_id)
+            if name == "queue_request_dequeued" and job["status"] == "queued":
+                job["status"] = "generating"
+            elif name == "generation_result_available":
+                job["status"] = "done"
+                found = history_lookup(request_id) if history_lookup else None
+                if found:
+                    job["history_id"] = str(found.get("history_id") or "")
+                    job["file_path"] = str(found.get("file_path") or "")
+                    job["rel_path"] = str(found.get("rel_path") or "")
+                    job["final"] = {"prompt": str(found.get("prompt") or ""), "negative": str(found.get("negative") or ""),
+                                    "params": found.get("params") or {}}
+            elif name == "generation_request_failed":
+                job["status"] = "failed"
+                job["error"] = str((payload or {}).get("message") or "")[:500]
+            elif name == "queue_request_removed" and job["status"] in ("queued", "pending"):
+                job["status"] = "skipped"
+            else:
+                return []
+            self._rollup(batch)
+            self._save(batch)
+            return [batch["batch_id"]]
+
+    def _rollup(self, batch: dict[str, Any]) -> None:
+        if batch["status"] in ("pending", "cancelled", "rejected", "done"):
+            return
+        statuses = [j["status"] for j in batch["jobs"]]
+        if any(s == "generating" for s in statuses):
+            batch["status"] = "generating"
+        if all(s in JOB_TERMINAL for s in statuses):
+            batch["status"] = "done"
+            batch["finished_at"] = _now_iso()
+            if not batch.get("done_notified"):
+                batch["done_notified"] = True
+                self._done_notifications.append({
+                    "type": "agent_inbox_done", "batch_id": batch["batch_id"],
+                    "done": statuses.count("done"), "failed": statuses.count("failed"), "skipped": statuses.count("skipped"),
+                })
