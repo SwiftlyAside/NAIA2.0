@@ -353,6 +353,14 @@ class AgentInboxService:
             self._save(batch)
             return job
 
+    def set_file_path(self, job_id: str, file_path: str) -> dict[str, Any]:
+        """자동 저장이 늦게 끝난 잡의 파일 경로를 뒤늦게 기록한다(결과 조회 시 라우트가 호출)."""
+        with self._lock:
+            batch, job = self.find_job(job_id)
+            job["file_path"] = str(file_path or "")
+            self._save(batch)
+            return job
+
     def mark_job_failed(self, job_id: str, reason: str) -> dict[str, Any]:
         with self._lock:
             batch, job = self.find_job(job_id)

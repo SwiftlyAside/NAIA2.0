@@ -143,9 +143,22 @@ def register_agent_inbox_routes(
     @app.get("/api/agent-inbox/batches/{batch_id}/results")
     async def api_agent_inbox_results(batch_id: str):
         try:
-            return service.results_payload(batch_id)
+            payload = service.results_payload(batch_id)
         except AgentInboxError as exc:
             return _error(exc)
+        # 자동 저장은 결과 이벤트 뒤 비동기라 done 시점엔 file_path 가 비어 있을 수 있다 — 조회 때 다시 채운다.
+        store = getattr(context, "result_store", None)
+        for job in payload["jobs"]:
+            if job["history_id"] and not job["file_path"] and store is not None:
+                item = store.get_item(job["history_id"]) if hasattr(store, "get_item") else None
+                path = str(getattr(item, "filepath", "") or "") if item is not None else ""
+                if path:
+                    job["file_path"] = path
+                    try:
+                        service.set_file_path(job["job_id"], path)
+                    except AgentInboxError:
+                        pass
+        return payload
 
     @app.post("/api/agent-inbox/batches/{batch_id}/cancel")
     async def api_agent_inbox_cancel(batch_id: str):

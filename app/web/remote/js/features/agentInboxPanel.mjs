@@ -37,7 +37,8 @@ export function createAgentInboxPanel({
   }
 
   function renderInbox() {
-    const rows = state.batches.filter(b => b.status !== 'rejected');
+    // 거절·결과 없는 취소 배치는 인박스에서 숨긴다(결과가 있는 취소 배치는 보드로 볼 수 있게 남긴다).
+    const rows = state.batches.filter(b => b.status !== 'rejected' && !(b.status === 'cancelled' && !(b.counts?.done)));
     if (!rows.length) { body.innerHTML = '<div class="ai-empty">받은 배치가 없습니다</div>'; return; }
     body.innerHTML = rows.map(b => {
       const isOpen = expanded.has(b.batch_id);

@@ -91,6 +91,24 @@ def test_rest_submit_list_get_results_cancel(tmp_path):
     assert c.get("/api/agent-inbox/settings").json()["max_jobs_per_batch"] == 9
 
 
+def test_results_backfills_file_path_from_store(tmp_path):
+    app, ctx, *_ = make_app(tmp_path)
+    c = TestClient(app)
+    bid = c.post("/api/agent-inbox/batches", json=batch_payload(1)).json()["batch_id"]
+    svc = routes.agent_inbox_service(ctx)
+    job = svc.get_batch(bid)["jobs"][0]
+    svc.mark_batch_approved(bid); svc.mark_job_queued(job["job_id"], "r1")
+    # 결과 이벤트 시점엔 자동 저장이 안 끝나 filepath 가 비어 있다
+    item = SimpleNamespace(history_id="h1", filepath="", rel_path="__history_item__/h1", generation_params={"input": "p"}, prompt_context={})
+    ctx.result_store.items["r1"] = item
+    ctx.publish("generation_result_available", {"request_id": "r1"})
+    assert c.get(f"/api/agent-inbox/batches/{bid}/results").json()["jobs"][0]["file_path"] == ""
+    item.filepath = "C:/out/h1.png"
+    ctx.result_store.get_item = lambda hid: item if hid == "h1" else None
+    assert c.get(f"/api/agent-inbox/batches/{bid}/results").json()["jobs"][0]["file_path"] == "C:/out/h1.png"
+    assert svc.get_batch(bid)["jobs"][0]["file_path"] == "C:/out/h1.png"
+
+
 def test_rest_agent_review(tmp_path):
     app, *_ = make_app(tmp_path)
     c = TestClient(app)
