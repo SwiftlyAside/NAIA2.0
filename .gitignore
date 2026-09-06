@@ -53,10 +53,6 @@ release_package*/
 
 # Plane: local development only (never remote-published source)
 /tests/
-# fork: Agent Inbox 테스트만 추적한다 (이 포크 전용 기능의 회귀 게이트)
-!/tests/
-/tests/*
-!/tests/agent_inbox/
 /docs/
 /refactor_docs/
 /refactor_plans/
