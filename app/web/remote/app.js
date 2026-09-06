@@ -1452,6 +1452,26 @@ const resultImageInputReady = import('./js/features/resultImageInput.mjs?v=20260
   .catch(error => {
     console.error('Failed to initialize result image input module', error);
   });
+let agentInboxPanel = null;
+const agentInboxReady = import('./js/features/agentInboxPanel.mjs?v=20260906-agent-inbox')
+  .then(({createAgentInboxPanel}) => {
+    agentInboxPanel = createAgentInboxPanel({
+      document, window, fetch, localStorage, showToast, escHtml, showAppDialog,
+      send: payload => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(payload)); },
+      onUnread: n => {
+        const b = document.getElementById('badgeAgentInbox');
+        if (b) { b.textContent = n ? String(n) : ''; b.classList.toggle('hidden', !n); }
+        moduleLauncherControl?.updateState?.();
+        setAgentInboxTitleBadge(n);
+      },
+      openHistory: (relPath, imageUrl) => {
+        const thumb = relPath ? document.querySelector(`#viewerGrid .viewer-thumb[data-path="${CSS.escape(relPath)}"]`) : null;
+        if (thumb) thumb.click(); else if (imageUrl) window.open(imageUrl, '_blank');
+      },
+    });
+    agentInboxPanel.init();
+  })
+  .catch(error => { console.error('Failed to initialize agent inbox module', error); });
 const queuePanelReady = import('./js/features/queuePanel.mjs?v=20260520-random-latency1')
   .then(({createQueuePanelController}) => {
     queuePanel = createQueuePanelController({
@@ -4261,7 +4281,10 @@ const wsMessageHandlers = {
   clear_api_result: onClearApiResult,
   setup_blocked: onSetupBlocked,
   probe_result: onProbeResult,
-  anlas_update: onAnlasUpdate,
+  anlas_update: m => { onAnlasUpdate(m); if (agentInboxPanel) agentInboxPanel.onAnlas(m); },
+  agent_inbox_state: m => { if (agentInboxPanel) agentInboxPanel.handleState(m); },
+  agent_inbox_new: m => { if (agentInboxPanel) agentInboxPanel.handleNew(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox', `${m.title || ''} · ${m.job_count}장 도착${m.paid_jobs ? ` (과금 ${m.paid_jobs})` : ''}`); },
+  agent_inbox_done: m => { if (agentInboxPanel) agentInboxPanel.handleDone(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox 완료', `${m.done} 성공 · ${m.failed} 실패 · ${m.skipped} 제외`, {raise: false}); },
   nai_usage_update: onNaiUsageUpdate,
   nai_accounts: m => { if (naiAccountPanel) naiAccountPanel.onAccounts(m); },
   nai_account_result: m => { if (naiAccountPanel) naiAccountPanel.onAccountResult(m); },
@@ -8811,6 +8834,28 @@ function flashTaskbarAttention() {
   try { window.naiaShell?.flashTaskbar?.(); } catch (e) { /* non-electron / no-op */ }
 }
 
+// Agent Inbox 알림 — Electron이면 창 전면+OS 토스트, 브라우저면 Web Notification.
+function notifyAgentInbox(title, body, {raise = true} = {}) {
+  const shell = window.naiaShell;
+  if (shell?.notify) {
+    if (raise) shell.raiseWindow?.();
+    shell.notify({title, body});
+    return;
+  }
+  try {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') new Notification(title, {body});
+      else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') new Notification(title, {body}); });
+    }
+  } catch (e) { /* no-op */ }
+}
+
+// Agent Inbox — 탭 제목 배지 "(n) NAIA Remote" (브라우저 모드에서 미승인 배치 수를 보이게).
+function setAgentInboxTitleBadge(n) {
+  const base = document.title.replace(/^\(\d+\)\s*/, '');
+  document.title = n ? `(${n}) ${base}` : base;
+}
+
 let autoModeFallbackInFlight = false;
 let autoModeFallbackTarget = '';
 const API_MODES = ['NAI', 'WEBUI', 'COMFYUI'];
@@ -10001,6 +10046,7 @@ const moduleLauncherReady = import('./js/features/moduleLauncher.mjs?v=20260829-
       openComfyUiWeb,
       setModuleParam,
       naiReferenceBlocked: () => naiModelBlocksReference(),
+      openAgentInbox: () => agentInboxPanel?.toggle(),
     });
     moduleLauncherControl.render();
     moduleLauncherControl.bind();

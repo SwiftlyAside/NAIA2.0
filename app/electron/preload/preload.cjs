@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("naiaShell", {
   openReleasePage: () => ipcRenderer.invoke("naia:open-release-page"),
   // Automation 완료 등에서 작업표시줄 버튼 깜빡임(Windows 노란불) 요청 — fire-and-forget.
   flashTaskbar: () => ipcRenderer.send("naia:flash-taskbar"),
+  raiseWindow: () => ipcRenderer.invoke("naia:raise-window"),
+  notify: (payload) => ipcRenderer.invoke("naia:notify", payload),
   // Embedded Danbooru browser (WebContentsView) bridge — Electron shell only.
   danbooruAttach: (rect) => ipcRenderer.invoke("naia:danbooru-attach", rect),
   danbooruDetach: () => ipcRenderer.invoke("naia:danbooru-detach"),

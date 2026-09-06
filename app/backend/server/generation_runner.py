@@ -1753,6 +1753,11 @@ async def _broadcast_generation_error(
     error: BaseException | None = None,
 ) -> None:
     context.is_generating = False
+    try:  # Agent Inbox 등 코어 구독자용 실패 신호(WS 계약 불변 — 새 메시지 타입 아님)
+        context.publish("generation_request_failed", {
+            "request_id": str(getattr(request, "request_id", "") or ""), "message": str(message)[:500]})
+    except Exception:
+        pass
     # 고른 모델을 레지스트리가 모른다 - 이건 사용자가 **다시 고르면 풀리는** 실패다.
     # 원문("등록되지 않은 NAI 모델 키입니다")은 계정 등록 문제처럼 읽혀서, 무엇을
     # 해야 하는지 말해 주는 문장으로 바꾸고 화면이 알아볼 표식을 싣는다.

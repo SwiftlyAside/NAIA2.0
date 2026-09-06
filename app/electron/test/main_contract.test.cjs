@@ -685,6 +685,15 @@ test("runtime install gate auto-downloads when NAIA_ELECTRON_AUTO_TAG_DOWNLOAD=1
   }
 });
 
+test("agent inbox IPC channels are registered", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "main", "main.cjs"), "utf8");
+  assert.equal(src.includes('ipcMain.handle("naia:raise-window"'), true);
+  assert.equal(src.includes('ipcMain.handle("naia:notify"'), true);
+  const preload = fs.readFileSync(path.join(__dirname, "..", "preload", "preload.cjs"), "utf8");
+  assert.equal(preload.includes('raiseWindow: () => ipcRenderer.invoke("naia:raise-window")'), true);
+  assert.equal(preload.includes('notify: (payload) => ipcRenderer.invoke("naia:notify", payload)'), true);
+});
+
 test("runtime install gate treats an already-active download as the made choice", async () => {
   // ``naia:restart-backend`` auto-arms the tag-archive download when a
   // migration finished without tag data, BEFORE the gate (re)runs. The gate
