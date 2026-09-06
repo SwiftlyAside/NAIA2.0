@@ -104,6 +104,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    # Windows 시스템 인증서(Norton·기업 프록시 루트)를 requests 가 신뢰하도록 — 첫 네트워크 호출 전에.
+    from app.backend.runtime.ca_bundle import default_cache_dir, ensure_system_ca_bundle
+    bundle = ensure_system_ca_bundle(default_cache_dir())
+    if bundle is not None:
+        print(f"NAIA Headless Web: system CA bundle -> {bundle}", flush=True)
     requested_port = normalize_web_shell_port(args.port)
     port = select_web_shell_port(args.host, requested_port, auto_port=args.auto_port)
     if port != requested_port:
