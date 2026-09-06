@@ -215,7 +215,8 @@ class AgentInboxService:
             "paid_jobs": sum(1 for j in batch["jobs"] if not is_free_tier(j["params"])),
             "note": batch.get("note", ""),
             "verdicts_pending": self.verdicts_pending(batch),
-            "verdicts_done": bool(batch.get("verdicts_notified")),
+            # 알림 플래그와 무관하게 상태에서 계산 — 이 기능 배포 전에 판정된 배치도 judged 로 잡힌다.
+            "verdicts_done": batch["status"] in ("done", "cancelled") and any(j["status"] == "done" for j in batch["jobs"]) and self.verdicts_pending(batch) == 0,
         }
 
     def list_batches(self, status: str | None = None, source: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
