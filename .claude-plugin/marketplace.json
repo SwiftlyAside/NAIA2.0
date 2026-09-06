@@ -1,0 +1,11 @@
+{
+  "name": "naia",
+  "owner": { "name": "SwiftlyAside", "url": "https://github.com/SwiftlyAside/NAIA2.0" },
+  "plugins": [
+    {
+      "name": "naia-inbox",
+      "source": "./claude-plugin/naia-inbox",
+      "description": "NAIA Agent Inbox — 코딩 에이전트가 생성 배치를 제출하고, 사용자 승인 뒤 결과·판정을 회수하는 MCP 도구와 스킬"
+    }
+  ]
+}

@@ -197,6 +197,8 @@ GEMINI.md
 !AGENTS.md
 !PROJECT_LAYOUT_POLICY.md
 !README.md
+# fork: Claude Code 플러그인 문서(SKILL.md 등)는 배포 대상이라 추적한다
+!/claude-plugin/**/*.md
 .claude/
 **/.claude/
 NAIA_generation_old.py
