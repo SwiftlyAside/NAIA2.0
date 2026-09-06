@@ -44,10 +44,12 @@ test('validate: url format, naia_root existence, forbidden env keys, max_jobs ra
 });
 
 test('mergeConfig merges launch and launch.env objects instead of replacing', () => {
-  const m = mergeConfig(DEFAULTS, { launch: { env: { SSL_CERT_FILE: 'b.pem' } } });
+  const base = mergeConfig(DEFAULTS, { launch: { env: { REQUESTS_CA_BUNDLE: 'a.pem' } } });
+  const m = mergeConfig(base, { launch: { env: { SSL_CERT_FILE: 'b.pem' } } });
   assert.equal(m.launch.command, 'npm');
-  assert.equal(m.launch.env.REQUESTS_CA_BUNDLE, DEFAULTS.launch.env.REQUESTS_CA_BUNDLE);
+  assert.equal(m.launch.env.REQUESTS_CA_BUNDLE, 'a.pem');
   assert.equal(m.launch.env.SSL_CERT_FILE, 'b.pem');
+  assert.deepEqual(DEFAULTS.launch.env, {});
 });
 
 test('saveConfig writes atomically and round-trips', () => {

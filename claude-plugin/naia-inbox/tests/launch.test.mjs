@@ -9,13 +9,13 @@ const clock = () => { let t = 0; return { now: () => t, sleep: async ms => { t +
 
 test('launchNaia spawns detached in naia_root/launch.cwd with merged env; exe path uses its own dir', () => {
   const calls = [];
-  const cfg = mergeConfig(DEFAULTS, { naia_root: 'F:/ai/NAIA2.0' });
+  const cfg = mergeConfig(DEFAULTS, { naia_root: 'F:/ai/NAIA2.0', launch: { env: { REQUESTS_CA_BUNDLE: 'c.pem' } } });
   const r = launchNaia({ config: cfg, spawn: fakeSpawn(calls), platform: 'win32', env: { PATH: 'p' } });
   assert.equal(r.pid, 4242);
   assert.equal(calls[0].command, 'npm'); assert.deepEqual(calls[0].args, ['start']);
   assert.equal(calls[0].opts.cwd, path.join('F:/ai/NAIA2.0', 'app/electron'));
   assert.equal(calls[0].opts.detached, true); assert.equal(calls[0].opts.shell, true);
-  assert.equal(calls[0].opts.env.REQUESTS_CA_BUNDLE, DEFAULTS.launch.env.REQUESTS_CA_BUNDLE); assert.equal(calls[0].opts.env.PATH, 'p');
+  assert.equal(calls[0].opts.env.REQUESTS_CA_BUNDLE, 'c.pem'); assert.equal(calls[0].opts.env.PATH, 'p');
   assert.equal(calls[1], 'unref');
   const calls2 = [];
   launchNaia({ config: mergeConfig(cfg, { launch: { command: 'F:/ai/NAIA-Portable/NAIA.exe', args: [] } }), spawn: fakeSpawn(calls2), platform: 'win32', env: {} });

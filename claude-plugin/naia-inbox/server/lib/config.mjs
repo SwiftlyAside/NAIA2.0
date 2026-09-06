@@ -6,7 +6,8 @@ export const DEFAULTS = Object.freeze({
   naia_root: 'F:/ai/NAIA2.0',
   launch: {
     cwd: 'app/electron', command: 'npm', args: ['start'],
-    env: { REQUESTS_CA_BUNDLE: 'F:/ai/NAIA2.0/venv/ca-bundle.pem', SSL_CERT_FILE: 'F:/ai/NAIA2.0/venv/ca-bundle.pem' },
+    // TLS 가로채기(Norton 등)는 백엔드가 Windows 시스템 인증서로 스스로 처리한다(app/backend/runtime/ca_bundle.py) — 기본 env 없음.
+    env: {},
     ready_timeout_sec: 120,
   },
   default_source: 'claude-code',
