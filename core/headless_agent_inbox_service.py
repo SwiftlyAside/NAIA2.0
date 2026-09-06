@@ -214,6 +214,8 @@ class AgentInboxService:
             "updated_at": batch.get("updated_at"), "job_count": len(batch["jobs"]), "counts": counts,
             "paid_jobs": sum(1 for j in batch["jobs"] if not is_free_tier(j["params"])),
             "note": batch.get("note", ""),
+            "verdicts_pending": self.verdicts_pending(batch),
+            "verdicts_done": bool(batch.get("verdicts_notified")),
         }
 
     def list_batches(self, status: str | None = None, source: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
@@ -305,8 +307,26 @@ class AgentInboxService:
             batch, job = self.find_job(job_id)
             job["verdict"] = {"decision": decision, "note": str(note or ""),
                               "by": by if by in ("user", "agent") else "user", "at": _now_iso()}
+            self._check_verdicts_done(batch)
             self._save(batch)
             return job
+
+    @staticmethod
+    def verdicts_pending(batch: dict[str, Any]) -> int:
+        """완료(done) 잡 중 아직 판정이 없는 수."""
+        return sum(1 for j in batch["jobs"] if j["status"] == "done" and not (j.get("verdict") or {}).get("decision"))
+
+    def _check_verdicts_done(self, batch: dict[str, Any]) -> None:
+        """배치가 끝났고 완료 잡 전부에 판정이 붙은 첫 순간에 한 번만 알림을 쌓는다 — 대기 중인 에이전트·사용자 토스트용."""
+        if batch["status"] not in ("done", "cancelled") or batch.get("verdicts_notified"):
+            return
+        done_jobs = [j for j in batch["jobs"] if j["status"] == "done"]
+        if not done_jobs or self.verdicts_pending(batch):
+            return
+        batch["verdicts_notified"] = True
+        batch["verdicts_done_at"] = _now_iso()
+        counts = {d: sum(1 for j in done_jobs if (j.get("verdict") or {}).get("decision") == d) for d in VERDICTS}
+        self._done_notifications.append({"type": "agent_inbox_verdicts_done", "batch_id": batch["batch_id"], "title": batch["title"], **counts})
 
     def set_agent_review(self, job_id: str, review: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(review, dict):

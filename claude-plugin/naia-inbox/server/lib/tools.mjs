@@ -63,8 +63,12 @@ export function createTools(deps) {
       const list = await c.getJson('/api/agent-inbox/batches?limit=50');
       const batches = list.batches || [];
       const active = batches.find(b => ['approved', 'generating'].includes(b.status)) || null;
-      return ok(`NAIA 접속됨 · 미승인 ${batches.filter(b => b.status === 'pending').length}`, { reachable: true, api_mode: st.api_mode, is_generating: !!st.is_generating,
-        pending_batches: batches.filter(b => b.status === 'pending').length, active: active && { batch_id: active.batch_id, title: active.title, status: active.status, counts: active.counts } });
+      // 판정이 끝난 완료 배치 — 에이전트가 자리에 없을 때 판정됐다면 여기서 따라잡는다(naia_fetch_images 재호출 → 편입).
+      const judged = batches.filter(b => b.status === 'done' && b.verdicts_done).map(b => ({ batch_id: b.batch_id, title: b.title, source: b.source, updated_at: b.updated_at }));
+      const awaiting = batches.filter(b => b.status === 'done' && !b.verdicts_done && b.verdicts_pending > 0).map(b => ({ batch_id: b.batch_id, title: b.title, verdicts_pending: b.verdicts_pending }));
+      return ok(`NAIA 접속됨 · 미승인 ${batches.filter(b => b.status === 'pending').length} · 판정 완료 ${judged.length}`, { reachable: true, api_mode: st.api_mode, is_generating: !!st.is_generating,
+        pending_batches: batches.filter(b => b.status === 'pending').length, active: active && { batch_id: active.batch_id, title: active.title, status: active.status, counts: active.counts },
+        judged_batches: judged, awaiting_verdicts: awaiting });
     },
     async naia_launch({ wait = true } = {}) {
       const c = client(); const { config } = cfg();

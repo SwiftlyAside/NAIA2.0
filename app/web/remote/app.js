@@ -4285,6 +4285,7 @@ const wsMessageHandlers = {
   agent_inbox_state: m => { if (agentInboxPanel) agentInboxPanel.handleState(m); },
   agent_inbox_new: m => { if (agentInboxPanel) agentInboxPanel.handleNew(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox', `${m.title || ''} · ${m.job_count}장 도착${m.paid_jobs ? ` (과금 ${m.paid_jobs})` : ''}`); },
   agent_inbox_done: m => { if (agentInboxPanel) agentInboxPanel.handleDone(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox 완료', `${m.done} 성공 · ${m.failed} 실패 · ${m.skipped} 제외`, {raise: false}); },
+  agent_inbox_verdicts_done: m => { if (agentInboxPanel) agentInboxPanel.handleVerdictsDone(m); notifyAgentInbox('Agent Inbox 판정 완료', `${m.title || ''} · 채택 ${m.accept} · 반려 ${m.reject} · 재발주 ${m.redo} — 에이전트가 회수합니다`, {raise: false}); },
   nai_usage_update: onNaiUsageUpdate,
   nai_accounts: m => { if (naiAccountPanel) naiAccountPanel.onAccounts(m); },
   nai_account_result: m => { if (naiAccountPanel) naiAccountPanel.onAccountResult(m); },
