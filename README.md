@@ -88,6 +88,8 @@ clone 하면 실행에 필요한 소스 **외에** maintainer용 빌드/릴리�
 - 조회: `GET /api/agent-inbox/batches[?status=]` · `GET …/batches/{id}` · `GET …/batches/{id}/results` · 대기 배치 취소 `POST …/batches/{id}/cancel` · 검수 기록 `POST …/jobs/{job_id}/agent-review`.
 - **생성 개시는 화면의 사용자 클릭뿐이다** — REST에 승인·생성 엔드포인트가 없다(NovelAI ToS "human action").
 - 영속: `<user-data>/data/agent_inbox/*.json`. 토큰·계정 정보는 싣지 않는다.
+- Claude Code 플러그인: `claude plugin marketplace add SwiftlyAside/NAIA2.0` → `claude plugin install naia-inbox@naia` (`claude-plugin/naia-inbox/README.md`).
+- Windows에서 Norton·기업 프록시가 TLS를 가로채면 백엔드가 기동 시 시스템 인증서 저장소를 certifi에 합쳐 신뢰한다(`app/backend/runtime/ca_bundle.py`, 끄기 `NAIA_SYSTEM_CA=0`, 직접 지정하려면 `REQUESTS_CA_BUNDLE`).
 
 ## 🧩 Extensions (사용자 확장) — experimental
 

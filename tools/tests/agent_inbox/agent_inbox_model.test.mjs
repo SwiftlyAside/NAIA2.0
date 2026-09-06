@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   progressOf, jobStatusLabel, verdictClass, reviewChips, costLine, isFreeTierJob,
-} from '../../app/web/remote/js/features/agentInboxModel.mjs';
+} from '../../../app/web/remote/js/features/agentInboxModel.mjs';
 
 const job = (status, extra = {}) => ({ job_id: status, key: 'E1', status, params: { seed: 1, width: 832, height: 1216, steps: 28 }, ...extra });
 
