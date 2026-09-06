@@ -1,10 +1,17 @@
 {
   "name": "naia-inbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "NAIA Agent Inbox 제출·기동·대기·결과 회수·검수 기록 (MCP stdio, 무의존)",
-  "author": { "name": "SwiftlyAside" },
+  "author": {
+    "name": "SwiftlyAside"
+  },
   "repository": "https://github.com/SwiftlyAside/NAIA2.0",
   "license": "MIT",
-  "keywords": ["naia", "novelai", "image-generation", "agent-inbox"],
+  "keywords": [
+    "naia",
+    "novelai",
+    "image-generation",
+    "agent-inbox"
+  ],
   "mcpServers": "./.mcp.json"
 }

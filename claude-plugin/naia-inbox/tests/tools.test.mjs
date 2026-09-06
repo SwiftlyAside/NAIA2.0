@@ -76,6 +76,22 @@ test('naia_submit_batch validates locally, launches when down, posts, returns wa
   assert.equal(bad.isError, true); assert.equal(bad.json.code, 'bad_args');
 });
 
+test('naia_submit_batch reads batch_file, inline fields override, missing file -> bad_args', async () => {
+  const naia = fakeNaia({ 'GET /api/status': () => [200, {}], 'POST /api/agent-inbox/batches': ({ body }) => [200, { ok: true, batch_id: 'bf', job_count: body.jobs.length, warnings: [] }] });
+  const d = deps({ fetch: naia.fetch });
+  const file = path.join(d.dataDir, 'batch.json');
+  fs.writeFileSync(file, JSON.stringify({ title: '파일 제목', source: 'genit', project: 'p', jobs: [{ key: 'A', prompt: 'p', params: { width: 832, height: 1216, steps: 28 } }] }));
+  const t = createTools(d);
+  const r = parse(await t.call('naia_submit_batch', { batch_file: file, title: '인라인 제목' }));
+  assert.equal(r.isError, false); assert.equal(r.json.batch_id, 'bf'); assert.equal(r.json.batch_file, file);
+  const post = naia.calls.find(c => c.key === 'POST /api/agent-inbox/batches');
+  assert.equal(post.body.title, '인라인 제목'); assert.equal(post.body.source, 'genit'); assert.equal(post.body.jobs[0].key, 'A');
+  const missing = parse(await t.call('naia_submit_batch', { batch_file: path.join(d.dataDir, 'nope.json') }));
+  assert.equal(missing.isError, true); assert.equal(missing.json.code, 'bad_args');
+  const noTitle = parse(await t.call('naia_submit_batch', { jobs: [{ key: 'A', prompt: 'p', params: { width: 832, height: 1216, steps: 28 } }] }));
+  assert.equal(noTitle.isError, true); assert.equal(noTitle.json.code, 'bad_args');
+});
+
 test('naia_list_batches / naia_results / naia_review_job / naia_cancel_batch pass through; 409 -> http_4xx', async () => {
   const naia = fakeNaia({
     'GET /api/agent-inbox/batches': ({ search }) => [200, { batches: [{ batch_id: 'b1', status: 'done' }], search }],
