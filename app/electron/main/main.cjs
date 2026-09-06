@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, screen, session, shell } = require("electron");
+const { app, BrowserWindow, WebContentsView, dialog, ipcMain, Menu, Notification, screen, session, shell } = require("electron");
 const { spawn, spawnSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -2099,6 +2099,26 @@ ipcMain.on("naia:flash-taskbar", () => {
   try { mainWindow.flashFrame(true); } catch (e) {}
 });
 
+// Agent Inbox: 외부 에이전트 배치 도착/완료 — 창을 전면으로(최소화·가려짐 복구) + OS 토스트.
+ipcMain.handle("naia:raise-window", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  try {
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.setAlwaysOnTop(true); mainWindow.focus(); mainWindow.setAlwaysOnTop(false);
+    return true;
+  } catch (e) { return false; }
+});
+ipcMain.handle("naia:notify", (_event, payload) => {
+  try {
+    if (!Notification.isSupported()) return false;
+    const n = new Notification({ title: String(payload?.title || "NAIA"), body: String(payload?.body || ""), silent: false });
+    n.on("click", () => { try { if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); } } catch (e) {} });
+    n.show();
+    return true;
+  } catch (e) { return false; }
+});
+
 // Browser-style Ctrl+± / Ctrl+0 keyboard zoom for the main app window.
 function attachZoomKeyboard(targetWindow) {
   targetWindow.webContents.on("before-input-event", (event, input) => {
@@ -3272,6 +3292,8 @@ if (!lock) {
   });
 
   app.whenReady().then(async () => {
+    // Windows 토스트(Notification)는 AppUserModelId 가 없으면 표시되지 않는다 — package.json build.appId 와 동일.
+    if (process.platform === "win32") { try { app.setAppUserModelId("lab.dnt.naia"); } catch (e) {} }
     // ⚠️ **백엔드가 뜨기 전에** 정해야 한다 - backendEnvironment() 가 이 값을 읽는다.
     //    읽는 즉시 플래그를 지우므로(one-shot) 다음 실행은 평소대로 돈다.
     safeModeThisBoot = consumeSafeModeOnce();

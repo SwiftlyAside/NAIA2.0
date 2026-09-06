@@ -4283,8 +4283,8 @@ const wsMessageHandlers = {
   probe_result: onProbeResult,
   anlas_update: m => { onAnlasUpdate(m); if (agentInboxPanel) agentInboxPanel.onAnlas(m); },
   agent_inbox_state: m => { if (agentInboxPanel) agentInboxPanel.handleState(m); },
-  agent_inbox_new: m => { if (agentInboxPanel) agentInboxPanel.handleNew(m); playNotifySound(); flashTaskbarAttention(); },
-  agent_inbox_done: m => { if (agentInboxPanel) agentInboxPanel.handleDone(m); playNotifySound(); flashTaskbarAttention(); },
+  agent_inbox_new: m => { if (agentInboxPanel) agentInboxPanel.handleNew(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox', `${m.title || ''} · ${m.job_count}장 도착${m.paid_jobs ? ` (과금 ${m.paid_jobs})` : ''}`); },
+  agent_inbox_done: m => { if (agentInboxPanel) agentInboxPanel.handleDone(m); playNotifySound(); flashTaskbarAttention(); notifyAgentInbox('Agent Inbox 완료', `${m.done} 성공 · ${m.failed} 실패 · ${m.skipped} 제외`, {raise: false}); },
   nai_usage_update: onNaiUsageUpdate,
   nai_accounts: m => { if (naiAccountPanel) naiAccountPanel.onAccounts(m); },
   nai_account_result: m => { if (naiAccountPanel) naiAccountPanel.onAccountResult(m); },
@@ -8832,6 +8832,22 @@ document.addEventListener('keydown', _primeNotifyAudio);
 // 웹/비-Electron(naiaShell 없음)에서는 자동 no-op. main이 창 비활성일 때만 실제로 깜빡인다.
 function flashTaskbarAttention() {
   try { window.naiaShell?.flashTaskbar?.(); } catch (e) { /* non-electron / no-op */ }
+}
+
+// Agent Inbox 알림 — Electron이면 창 전면+OS 토스트, 브라우저면 Web Notification.
+function notifyAgentInbox(title, body, {raise = true} = {}) {
+  const shell = window.naiaShell;
+  if (shell?.notify) {
+    if (raise) shell.raiseWindow?.();
+    shell.notify({title, body});
+    return;
+  }
+  try {
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') new Notification(title, {body});
+      else if (Notification.permission !== 'denied') Notification.requestPermission().then(p => { if (p === 'granted') new Notification(title, {body}); });
+    }
+  } catch (e) { /* no-op */ }
 }
 
 // Agent Inbox — 탭 제목 배지 "(n) NAIA Remote" (브라우저 모드에서 미승인 배치 수를 보이게).
