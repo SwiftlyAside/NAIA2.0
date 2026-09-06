@@ -78,6 +78,17 @@ clone 하면 실행에 필요한 소스 **외에** maintainer용 빌드/릴리�
 
 ---
 
+## 📥 Agent Inbox (fork 전용)
+
+외부 코딩 에이전트(Claude Code 등)가 생성 배치를 REST로 넣으면 NAIA가 사용자를 깨우고(창 전면·OS 토스트·런처 배지),
+사용자가 **자동화 / 고급 기능 ▸ 📥 Agent Inbox**에서 "생성 시작" 1클릭으로 큐에 적재한다. 결과 썸네일·상태·판정(채택/반려/재발주·메모)·
+에이전트 검수 칩이 같은 카드에 붙고, 에이전트는 REST로 결과·판정을 회수한다.
+
+- 제출: `POST /api/agent-inbox/batches` `{source, project, title, jobs:[{key, prompt, negative, params:{seed,width,height,steps,cfg_scale,sampler,model}, expect:{character,emotion,label,note}}]}` (기본 상한 9장·하드 32).
+- 조회: `GET /api/agent-inbox/batches[?status=]` · `GET …/batches/{id}` · `GET …/batches/{id}/results` · 대기 배치 취소 `POST …/batches/{id}/cancel` · 검수 기록 `POST …/jobs/{job_id}/agent-review`.
+- **생성 개시는 화면의 사용자 클릭뿐이다** — REST에 승인·생성 엔드포인트가 없다(NovelAI ToS "human action").
+- 영속: `<user-data>/data/agent_inbox/*.json`. 토큰·계정 정보는 싣지 않는다.
+
 ## 🧩 Extensions (사용자 확장) — experimental
 
 NAIA의 **메인 코드를 수정하지 않고** Python으로 기능을 추가하는 공식 방법입니다.
