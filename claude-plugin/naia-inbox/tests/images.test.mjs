@@ -33,8 +33,27 @@ test('fetchImages: downloads done jobs, writes sidecars, falls back to file_path
   assert.equal(side.history_id, 'h1'); assert.equal(side.verdict.decision, 'accept'); assert.equal(side.fetched_at, '2026-09-06T10:00:00.000Z');
   assert.equal(fs.readFileSync(path.join(dir, 'B.png')).equals(PNG), true);
   assert.deepEqual(r.failed.map(f => f.key), ['C']);
+  // 같은 배치를 다시 부르면 복제(_2)가 아니라 사이드카 갱신이다
   const only = await fetchImages({ client, fs, batch, outDir: dir, keys: ['B'], now: () => new Date() });
-  assert.deepEqual(only.saved.map(s => s.key), ['B']); assert.equal(path.basename(only.saved[0].path), 'B_2.png');
+  assert.deepEqual(only.saved.map(s => s.key), ['B']); assert.equal(path.basename(only.saved[0].path), 'B.png'); assert.equal(only.saved[0].source, 'refresh');
+});
+
+test('fetchImages refreshes an existing sidecar of the same batch instead of duplicating the PNG', async () => {
+  const dir = tmp();
+  const batch = { batch_id: 'b1', jobs: [{ key: 'A', status: 'done', history_id: 'h1', file_path: '', final: { prompt: 'p' }, verdict: null, agent_review: null }] };
+  const client = { getBytes: async () => PNG };
+  await fetchImages({ client, fs, batch, outDir: dir, now: () => new Date('2026-09-06T10:00:00Z') });
+  batch.jobs[0].verdict = { decision: 'accept', by: 'user' };
+  let downloads = 0;
+  const r = await fetchImages({ client: { getBytes: async () => { downloads++; return PNG; } }, fs, batch, outDir: dir, now: () => new Date('2026-09-06T11:00:00Z') });
+  assert.equal(downloads, 0); assert.equal(r.saved[0].source, 'refresh'); assert.equal(path.basename(r.saved[0].path), 'A.png');
+  assert.equal(fs.existsSync(path.join(dir, 'A_2.png')), false);
+  const side = JSON.parse(fs.readFileSync(path.join(dir, 'A.naia.json'), 'utf8'));
+  assert.equal(side.verdict.decision, 'accept'); assert.equal(side.fetched_at, '2026-09-06T10:00:00.000Z'); assert.equal(side.refreshed_at, '2026-09-06T11:00:00.000Z');
+  // 다른 배치의 같은 키는 새 파일(_2)로
+  const other = { batch_id: 'b2', jobs: [{ key: 'A', status: 'done', history_id: 'h9', file_path: '', final: null }] };
+  const r2 = await fetchImages({ client, fs, batch: other, outDir: dir, now: () => new Date() });
+  assert.equal(path.basename(r2.saved[0].path), 'A_2.png');
 });
 
 test('fetchImages rejects relative out_dir', async () => {
