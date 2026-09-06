@@ -51,10 +51,13 @@ test('naia_configure reads with sources and validates sets; forbidden env key re
 
 test('naia_status: reachable summary vs unreachable (not an error)', async () => {
   const naia = fakeNaia({ 'GET /api/status': () => [200, { api_mode: 'NAI', is_generating: false }],
-    'GET /api/agent-inbox/batches': () => [200, { batches: [{ batch_id: 'b1', status: 'pending', title: 't', counts: {} }] }] });
+    'GET /api/agent-inbox/batches': () => [200, { batches: [{ batch_id: 'b1', status: 'pending', title: 't', counts: {} },
+      { batch_id: 'b2', status: 'done', title: 'judged', source: 'genit', verdicts_done: true, verdicts_pending: 0 },
+      { batch_id: 'b3', status: 'done', title: 'waiting', verdicts_done: false, verdicts_pending: 2 }] }] });
   const t = createTools(deps({ fetch: naia.fetch }));
   const r = parse(await t.call('naia_status', {}));
   assert.equal(r.json.reachable, true); assert.equal(r.json.pending_batches, 1);
+  assert.deepEqual(r.json.judged_batches.map(b => b.batch_id), ['b2']); assert.deepEqual(r.json.awaiting_verdicts.map(b => [b.batch_id, b.verdicts_pending]), [['b3', 2]]);
   naia.state.reachable = false;
   const r2 = parse(await t.call('naia_status', {}));
   assert.equal(r2.isError, false); assert.equal(r2.json.reachable, false);

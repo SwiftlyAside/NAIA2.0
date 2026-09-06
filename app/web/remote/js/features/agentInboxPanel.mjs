@@ -7,7 +7,7 @@ export function createAgentInboxPanel({
   showAppDialog, onUnread = () => {}, openHistory = () => {},
 }) {
   const root = document.getElementById('agentInboxPanel');
-  if (!root) return { init() {}, handleState() {}, handleNew() {}, handleDone() {}, onAnlas() {}, open() {}, toggle() {} };
+  if (!root) return { init() {}, handleState() {}, handleNew() {}, handleDone() {}, handleVerdictsDone() {}, onAnlas() {}, open() {}, toggle() {} };
   const title = root.querySelector('[data-ai-title]');
   const meta = root.querySelector('[data-ai-meta]');
   const body = root.querySelector('[data-ai-body]');
@@ -43,6 +43,10 @@ export function createAgentInboxPanel({
     body.innerHTML = rows.map(b => {
       const isOpen = expanded.has(b.batch_id);
       const paid = b.paid_jobs ? badge(`${b.paid_jobs} 과금`, 'warn') : '';
+      // 완료 배치의 판정 진행 — 남은 수(경고색) 또는 "판정 완료"(에이전트 회수 대기)
+      const verdictChip = b.status === 'done'
+        ? (b.verdicts_done ? badge('판정 완료', 'done') : (b.verdicts_pending ? badge(`판정 ${b.verdicts_pending} 남음`, 'warn') : ''))
+        : '';
       const actions = b.status === 'pending'
         ? `<button type="button" class="ai-btn primary" data-ai-approve="${escHtml(b.batch_id)}">생성 시작</button>
            <button type="button" class="ai-btn danger" data-ai-reject="${escHtml(b.batch_id)}">거절</button>`
@@ -50,7 +54,7 @@ export function createAgentInboxPanel({
       return `<div class="ai-batch ${b.status}" data-batch="${escHtml(b.batch_id)}">
         <div class="ai-batch-top">
           <span class="ai-batch-title">${escHtml(b.title)}</span>
-          ${badge(b.source)} ${badge(`${b.job_count}장`)} ${badge(batchStatusLabel(b.status), b.status)} ${paid}
+          ${badge(b.source)} ${badge(`${b.job_count}장`)} ${badge(batchStatusLabel(b.status), b.status)} ${paid} ${verdictChip}
         </div>
         <div class="ai-batch-sub">${escHtml(b.project || '')} · ${escHtml((b.created_at || '').replace('T', ' '))}</div>
         <div class="ai-batch-actions">${actions}
@@ -185,9 +189,10 @@ export function createAgentInboxPanel({
   }
   function handleNew(m) { visible = true; collapsed = false; view = 'inbox'; render(); showToast(`Agent Inbox: ${m.title || ''} (${m.job_count}장)`, 'info'); }
   function handleDone(m) { showToast(`Agent Inbox 완료: ${m.done} 성공 · ${m.failed} 실패 · ${m.skipped} 제외`, m.failed ? 'warning' : 'success'); }
+  function handleVerdictsDone(m) { showToast(`판정 완료: 채택 ${m.accept} · 반려 ${m.reject} · 재발주 ${m.redo} — 에이전트가 회수합니다`, 'success'); }
   function onAnlas(m) { anlas = m; }
   function open() { visible = true; collapsed = false; render(); send({ type: 'agent_inbox_refresh' }); }
   function toggle() { if (visible) { visible = false; render(); } else { open(); } }
   function init() { bind(); render(); }
-  return { init, handleState, handleNew, handleDone, onAnlas, open, toggle };
+  return { init, handleState, handleNew, handleDone, handleVerdictsDone, onAnlas, open, toggle };
 }

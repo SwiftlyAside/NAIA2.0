@@ -115,6 +115,23 @@ def test_verdict_and_review(svc):
         svc.set_agent_review(j["job_id"], {"safety": "maybe"})
 
 
+def test_verdicts_done_notification_fires_once_when_all_done_jobs_are_judged(svc):
+    b, _ = svc.submit(payload(2)); bid = b["batch_id"]; j1, j2 = b["jobs"]
+    svc.mark_batch_approved(bid); svc.mark_job_queued(j1["job_id"], "r1"); svc.mark_job_queued(j2["job_id"], "r2")
+    svc.handle_event("generation_result_available", {"request_id": "r1"}); svc.handle_event("generation_result_available", {"request_id": "r2"})
+    assert svc.get_batch(bid)["status"] == "done"
+    svc.pop_done_notifications()  # agent_inbox_done 소비
+    assert svc.summary(svc.get_batch(bid))["verdicts_pending"] == 2
+    svc.set_verdict(j1["job_id"], "accept")
+    assert svc.pop_done_notifications() == []
+    svc.set_verdict(j2["job_id"], "reject", note="x")
+    notes = svc.pop_done_notifications()
+    assert notes == [{"type": "agent_inbox_verdicts_done", "batch_id": bid, "title": "t", "accept": 1, "reject": 1, "redo": 0}]
+    s = svc.summary(svc.get_batch(bid)); assert s["verdicts_pending"] == 0 and s["verdicts_done"] is True
+    svc.set_verdict(j2["job_id"], "redo")  # 판정 변경은 다시 알리지 않는다
+    assert svc.pop_done_notifications() == []
+
+
 def test_results_payload_shape(svc):
     b, _ = svc.submit(payload(1)); bid = b["batch_id"]
     r = svc.results_payload(bid)

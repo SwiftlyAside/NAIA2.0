@@ -1,7 +1,7 @@
 // JSON-RPC 디스패치. 요청마다 독립 실행 — naia_await_batch 가 블로킹돼도 ping·tools/list 는 응답한다.
 import { result, error, notification, E_PARSE, E_METHOD, E_PARAMS, E_INTERNAL } from './protocol.mjs';
 
-export const SERVER_INFO = { name: 'naia-inbox', version: '0.1.2' };
+export const SERVER_INFO = { name: 'naia-inbox', version: '0.1.3' };
 
 export function createServer({ tools, write, log = () => {} }) {
   async function handle(msg) {
