@@ -29,6 +29,12 @@ test('plugin manifest and mcp server entry', () => {
   assert.equal(srv.timeout, 86400000);
 });
 
+test('skill and README are exempt from the repo-wide *.md ignore (plugin docs must ship)', () => {
+  const ignore = fs.readFileSync(path.join(REPO, '.gitignore'), 'utf8');
+  assert.equal(ignore.includes('!/claude-plugin/**/*.md'), true);
+  assert.equal(fs.existsSync(path.join(PLUGIN, 'skills', 'naia-inbox', 'SKILL.md')), true);
+});
+
 test('no package.json or node_modules inside the plugin (zero-dependency contract)', () => {
   assert.equal(fs.existsSync(path.join(PLUGIN, 'package.json')), false);
   assert.equal(fs.existsSync(path.join(PLUGIN, 'node_modules')), false);
