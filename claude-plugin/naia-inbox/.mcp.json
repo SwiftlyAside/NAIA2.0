@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "naia-inbox": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/naia-inbox-mcp.mjs"],
+      "env": { "NAIA_INBOX_DATA": "${CLAUDE_PLUGIN_DATA}" },
+      "timeout": 86400000
+    }
+  }
+}
