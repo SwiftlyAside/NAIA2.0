@@ -31,7 +31,7 @@ export const DEFINITIONS = [
   { name: 'naia_configure', description: '플러그인 설정 조회·변경 (base_url, naia_root, launch, max_jobs). set 은 얕은 병합.', inputSchema: S({ set: { type: 'object' } }) },
   { name: 'naia_status', description: 'NAIA 접속 여부·모드·미승인 배치 수·진행 중 배치 요약. 미접속이어도 오류가 아니다.', inputSchema: S({}) },
   { name: 'naia_launch', description: 'NAIA 가 꺼져 있으면 기동하고 준비될 때까지 기다린다. 생성을 개시하지 않는다.', inputSchema: S({ wait: { type: 'boolean', default: true } }) },
-  { name: 'naia_submit_batch', description: '생성 배치를 Agent Inbox 에 제출한다(미기동이면 기동). 생성은 사용자가 NAIA 화면에서 "생성 시작"을 눌러야 시작된다.', inputSchema: S({ title: { type: 'string' }, jobs: { type: 'array', items: JOB, minItems: 1 }, source: { type: 'string' }, project: { type: 'string' }, note: { type: 'string' }, launch: { type: 'boolean', default: true } }, ['title', 'jobs']) },
+  { name: 'naia_submit_batch', description: '생성 배치를 Agent Inbox 에 제출한다(미기동이면 기동). jobs 를 인라인으로 주거나 batch_file(절대경로 JSON: {title, source, project, note, jobs}) 을 준다 — 인라인 필드가 파일 값을 덮는다. 생성은 사용자가 NAIA 화면에서 "생성 시작"을 눌러야 시작된다.', inputSchema: S({ batch_file: { type: 'string' }, title: { type: 'string' }, jobs: { type: 'array', items: JOB, minItems: 1 }, source: { type: 'string' }, project: { type: 'string' }, note: { type: 'string' }, launch: { type: 'boolean', default: true } }) },
   { name: 'naia_await_batch', description: '배치가 끝날 때까지(until=done) 또는 모든 완료 잡에 사용자 판정이 붙을 때까지(until=verdicts) 블로킹 대기하고 results 를 돌려준다.', inputSchema: S({ batch_id: { type: 'string' }, until: { type: 'string', enum: ['done', 'verdicts'], default: 'done' }, max_wait_sec: { type: 'integer', default: 86400 }, poll_sec: { type: 'number', default: 2 } }, ['batch_id']) },
   { name: 'naia_list_batches', description: '배치 요약 목록.', inputSchema: S({ status: { type: 'string' }, source: { type: 'string' }, limit: { type: 'integer', default: 20 } }) },
   { name: 'naia_results', description: '배치의 잡별 결과(히스토리 ID·파일 경로·최종 프롬프트·판정·검수).', inputSchema: S({ batch_id: { type: 'string' } }, ['batch_id']) },
@@ -75,8 +75,20 @@ export function createTools(deps) {
     },
     async naia_submit_batch(args) {
       const { config } = cfg();
+      // batch_file: 브리지(예: Genit naia-bridge batch)가 쓴 배치 JSON — 인라인 인자가 있으면 그 필드가 파일 값을 덮는다.
+      const batchFile = args.batch_file ? String(args.batch_file) : null;
+      let merged = { ...args };
+      if (args.batch_file) {
+        let fromFile;
+        try { fromFile = JSON.parse(fs.readFileSync(String(args.batch_file), 'utf8')); }
+        catch (e) { return fail('bad_args', `batch_file 을 읽을 수 없습니다: ${e.message}`, { batch_file: args.batch_file }); }
+        if (!fromFile || typeof fromFile !== 'object') return fail('bad_args', 'batch_file 의 내용이 객체가 아닙니다');
+        merged = { ...fromFile, ...Object.fromEntries(Object.entries(args).filter(([k, v]) => k !== 'batch_file' && v !== undefined)) };
+      }
+      if (!merged.title) return fail('bad_args', 'title 이 필요합니다(인라인 또는 batch_file)');
       let validated;
-      try { validated = validateBatch(args, { maxJobs: config.max_jobs }); } catch (e) { return errorToResult(e); }
+      try { validated = validateBatch(merged, { maxJobs: config.max_jobs }); } catch (e) { return errorToResult(e); }
+      args = merged;
       const c = client(); let launched = false;
       if (!(await c.status())) {
         if (args.launch === false) return fail('unreachable', 'NAIA 미접속(launch=false)', null, 'naia_launch 를 먼저 호출하세요');
@@ -86,7 +98,7 @@ export function createTools(deps) {
       }
       const body = { ...validated.batch, source: validated.batch.source || config.default_source };
       const res = await c.postJson('/api/agent-inbox/batches', body);
-      return ok(`배치 제출 ${res.batch_id} (${res.job_count}장)`, { ...res, warnings: [...validated.warnings, ...(res.warnings || [])], launched, user_action: 'NAIA 화면의 Agent Inbox 에서 "생성 시작"을 눌러야 생성됩니다' });
+      return ok(`배치 제출 ${res.batch_id} (${res.job_count}장)`, { ...res, warnings: [...validated.warnings, ...(res.warnings || [])], launched, batch_file: batchFile, user_action: 'NAIA 화면의 Agent Inbox 에서 "생성 시작"을 눌러야 생성됩니다' });
     },
     async naia_await_batch({ batch_id, until = 'done', max_wait_sec = 86400, poll_sec = 2 }, ctx = {}) {
       const c = client(); const { config } = cfg();
